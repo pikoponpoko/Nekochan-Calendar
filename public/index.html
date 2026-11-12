@@ -164,6 +164,12 @@ details.lost .li{opacity:.5}
 .steps li.past{opacity:.55}.steps li.nx{color:var(--ink);font-weight:700}.steps li.d.nx{color:var(--red)}
 .warn{font-size:11px;color:var(--red);line-height:1.35}
 .tiers{display:flex;flex-wrap:wrap;gap:1px 10px;font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums}.tiers .cu{color:var(--ink);font-weight:700}
+.syn{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.syn input{flex:1;min-width:0;height:26px;border:1px solid var(--rule);border-radius:4px;background:none;padding:0 8px;font-family:var(--num);font-size:12px;letter-spacing:.04em;text-transform:uppercase;-webkit-user-select:text;user-select:text}
+.syn button{height:26px;padding:0 10px;border:1px solid var(--rule);border-radius:4px;background:none;cursor:pointer;font-size:12px;flex:none}
+.syn button.pri{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.syn button.ic{width:26px;padding:0;display:grid;place-items:center}.syn button.ic svg{width:14px;height:14px}
+.code{font-family:var(--num);font-size:15px;font-weight:600;letter-spacing:.06em;-webkit-user-select:all;user-select:all;flex:1}
 .ev+.eh{margin-top:4px;border-top:1px solid var(--rule2);padding-top:6px}
 
 /* side column */
@@ -274,6 +280,10 @@ a{color:var(--blue);text-underline-offset:2px}
     <section class="box" data-tab="dl" aria-label="次の締切">
       <h2>次の締切<small>完成予定 2027年12月から</small></h2>
       <div class="list" id="next"></div>
+    </section>
+    <section class="box" data-tab="dl" aria-label="端末間の同期">
+      <h2>端末間の同期<small id="syncN"></small></h2>
+      <div id="sync"></div>
     </section>
   </aside>
 </div>
@@ -448,7 +458,21 @@ const FAM={"Filmværksted Viborg": "記載なし（本人用の個室）", "Nida
 const RES=new Set(["La Bande Vidéo（ピンスクリーン）","Filmværksted Viborg", "Nida Art Colony", "Folimage", "TOKAS 国内クリエーター滞在", "TOKAS 二都市間交流（海外派遣）", "H-AIR（広島）"]);const isR=r=>RES.has(r[0]);const rtag=r=>isR(r)?'<span class="rtag" title="アーティスト・イン・レジデンス">AIR</span>':"";
 const yen=n=>"¥"+Math.round(n).toLocaleString("ja-JP");
 function feeYen(r){const f=r[5];if(f===0)return[0,0];if(!f)return null;const k=f[0]==="JPY"?1:+st.r[f[0]]||0;return[f[1]*k,f[2]*k]}
-function save(){try{localStorage.setItem("nekoCal3",JSON.stringify(st))}catch(e){}}
+const SYNC_F=()=>({picked:st.picked.filter(i=>D[i]).map(i=>D[i][0]),status:Object.fromEntries(Object.entries(st.status).filter(([i])=>D[i]).map(([i,v])=>[D[i][0],v])),todo:st.todo||{},mine:st.mine||[],r:st.r});
+let lastSnap=JSON.stringify(SYNC_F()),pushT=null,syncMsg="";
+function save(){const sn=JSON.stringify(SYNC_F());if(sn!==lastSnap){lastSnap=sn;st.t=Date.now();if(st.code){clearTimeout(pushT);pushT=setTimeout(push,800)}}try{localStorage.setItem("nekoCal3",JSON.stringify(st))}catch(e){}}
+const normCode=c=>String(c||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+async function syncUrl(){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("nekocal:"+normCode(st.code)));return "/api/sync/"+[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+const hhmm=()=>{const d=new Date();return `${d.getHours()}:${String(d.getMinutes()).padStart(2,"0")}`};
+function applyRemote(d){const IX=Object.fromEntries(D.map((r,i)=>[r[0],i]));st.picked=(d.picked||[]).map(n=>IX[n]).filter(x=>x!=null);st.status={};Object.entries(d.status||{}).forEach(([n,v])=>{if(IX[n]!=null)st.status[IX[n]]=v});st.todo=d.todo||{};st.mine=d.mine||[];if(d.r)st.r=d.r;st.t=d.t;lastSnap=JSON.stringify(SYNC_F());try{localStorage.setItem("nekoCal3",JSON.stringify(st))}catch(e){}[["r-usd","USD"],["r-eur","EUR"],["r-gbp","GBP"]].forEach(([id,k])=>{$(id).value=st.r[k]});render()}
+async function push(){if(!st.code)return;try{const res=await fetch(await syncUrl(),{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({...SYNC_F(),t:st.t||Date.now()})});if(res.status===409)applyRemote(await res.json());else if(!res.ok)throw 0;syncMsg=`${hhmm()} 同期`}catch(e){syncMsg="接続できません"}renderSync()}
+async function pull(){if(!st.code)return;try{const res=await fetch(await syncUrl(),{cache:"no-store"});if(res.status===404){await push();return}if(!res.ok)throw 0;const d=await res.json();if(d.t>(st.t||0))applyRemote(d);else if((st.t||0)>d.t){await push();return}syncMsg=`${hhmm()} 同期`}catch(e){syncMsg="接続できません"}renderSync()}
+function newCode(){const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",v=crypto.getRandomValues(new Uint8Array(16));return [...v].map(x=>A[x%32]).join("").match(/.{4}/g).join("-")}
+function renderSync(){const el=$("sync");if(!el)return;$("syncN").textContent=st.code?syncMsg:"";
+  el.innerHTML=st.code?`<div class="syn"><span class="code">${esc(st.code)}</span><button class="ic" id="syCopy" title="コードをコピー" aria-label="コードをコピー"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M3 10.5V3.5A1 1 0 0 1 4 2.5h6.5"/></svg></button><button id="syOff" title="この端末の同期を解除">解除</button></div>`
+  :`<form class="syn" id="syForm"><input id="syIn" placeholder="XXXX-XXXX-XXXX-XXXX" aria-label="同期コード" autocomplete="off" spellcheck="false"><button type="submit" title="ほかの端末のコードで接続">接続</button><button type="button" class="pri" id="syNew" title="この端末の内容で新しいコードを作る">新規</button></form>`;
+  if(st.code){$("syCopy").onclick=()=>{try{navigator.clipboard.writeText(st.code);syncMsg="コピーしました";renderSync()}catch(e){}};$("syOff").onclick=()=>{delete st.code;syncMsg="";save();renderSync()}}
+  else{$("syNew").onclick=()=>{st.code=newCode();st.t=Date.now();save();push()};$("syForm").onsubmit=e=>{e.preventDefault();const c=normCode($("syIn").value);if(c.length!==16)return;st.code=c.match(/.{4}/g).join("-");st.t=0;save();pull()}}}
 let DB=null,dbBusy=false,dbPending=false;
 function dlStr(r){const d=dlDate(r);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
 function planDoc(){const items={};st.picked.forEach(i=>{const r=D[i];if(r)items[r[0]]={deadline:dlStr(r),part:r[2]||"",url:r[10]||"",kind:isR(r)?"residency":"festival",status:st.status[i]||""}});return{items,updatedAt:new Date().toISOString()}}
@@ -604,6 +628,7 @@ $("q").oninput=e=>{Q=e.target.value.trim().toLowerCase();render()};
 function setView(v){st.view="month";render()}
 [["r-usd","USD"],["r-eur","EUR"],["r-gbp","GBP"]].forEach(([id,k])=>{const el=$(id);el.value=st.r[k];el.oninput=()=>{st.r[k]=+el.value||0;save();renderSide()}});
 setView(st.view);
+renderSync();if(st.code)pull();document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")pull()});
 let rz;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>st.view==="month"&&drawScenes(),120)});
 try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>st.view==="month"&&drawScenes())}catch(e){}
 new MutationObserver(()=>st.view==="month"&&drawScenes()).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
