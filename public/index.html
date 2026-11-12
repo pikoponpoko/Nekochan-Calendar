@@ -150,6 +150,11 @@ details.lost .li{opacity:.5}
 .ev span{min-width:0;overflow-wrap:anywhere;line-height:1.3}
 .ev small{white-space:nowrap}
 .ev small{color:var(--sub)}
+.ev em{font-style:normal;font-size:11px;color:var(--blue);white-space:nowrap;min-width:4.2em;text-align:right}
+.ev.d{grid-template-columns:8px 1fr auto auto}
+.eh{padding:3px 4px 1px;font-size:11px;font-weight:700;color:var(--red)}
+.eh.f{color:var(--blue)}
+.ev+.eh{margin-top:4px;border-top:1px solid var(--rule2);padding-top:6px}
 
 /* side column */
 .side{display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 56px)}
@@ -415,6 +420,7 @@ try{const s=JSON.parse(localStorage.getItem("nekoCal3")||"null");if(s)Object.ass
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
 const ym=s=>{const[y,m]=s.split("-");return `${y}年${+m}月`};
+const mo=(s,base)=>{const[y,m]=s.split("-");return base&&base.slice(0,4)===y?`${+m}月`:`${y}年${+m}月`};
 const sym=s=>{const[y,m]=s.split("-");return `${y}/${+m}`};
 function dlDate(r){const[y,m]=r[1].split("-").map(Number);const p=r[2];let d=PART[p];if(d==null)d=/^末/.test(p)?new Date(y,m,0).getDate():15;return new Date(y,m-1,d)}
 function daysLeft(r){const t=new Date();t.setHours(0,0,0,0);return Math.ceil((dlDate(r)-t)/864e5)}
@@ -448,8 +454,10 @@ function renderMonths(list){
   const used=new Set();
   return `<div class="months">`+months.filter(m=>m>="2027-12"||list.some(({r})=>r[1]===m||r[3]===m)).map(m=>{
     const d=list.filter(({r})=>r[1]===m).sort((a,b)=>dlDate(a.r)-dlDate(b.r));const f=list.filter(({r})=>r[3]===m);
-    const ev=d.map(({r,i})=>`<div class="ev d${st.sel===i?" on":""}${st.status[i]==="rejected"?" dim":""}" data-i="${i}"><i></i><span class="${strong(r)?"bold":""}">${flag(r)}${esc(r[0])}${r[6]?'<span class="star">★</span>':""}${rtag(r)}${been(r)}${st.picked.includes(i)?'<b class="pk" title="応募予定">✓</b>':""}</span><small>${esc(r[2])}締切・あと${dd(daysLeft(r))}日</small></div>`).join("")+
-      f.map(({r,i})=>`<div class="ev f${st.sel===i?" on":""}${st.status[i]==="rejected"?" dim":""}" data-i="${i}"><i></i><span class="${strong(r)?"bold":""}">${flag(r)}${esc(r[0])}${rtag(r)}${been(r)}</span><small>${isR(r)?"滞在開始":"開催"}</small></div>`).join("");
+    const dv=d.map(({r,i})=>`<div class="ev d${st.sel===i?" on":""}${st.status[i]==="rejected"?" dim":""}" data-i="${i}"><i></i><span class="${strong(r)?"bold":""}">${flag(r)}${esc(r[0])}${r[6]?'<span class="star">★</span>':""}${rtag(r)}${been(r)}${st.picked.includes(i)?'<b class="pk" title="応募予定">✓</b>':""}</span><small>${r[2]?esc(r[2])+"・":""}あと${dd(daysLeft(r))}日</small><em>${r[3]?`${isR(r)?"滞在":"開催"} ${mo(r[3],m)}`:""}</em></div>`).join("");
+    const fv=
+      f.map(({r,i})=>`<div class="ev f${st.sel===i?" on":""}${st.status[i]==="rejected"?" dim":""}" data-i="${i}"><i></i><span class="${strong(r)?"bold":""}">${flag(r)}${esc(r[0])}${rtag(r)}${been(r)}</span><small>${isR(r)?"滞在開始・":""}締切 ${mo(r[1],m)}${r[2]&&r[2].length<=3?esc(r[2]):""}</small></div>`).join("");
+    const ev=(dv?`<div class="eh d">締切</div>${dv}`:"")+(fv?`<div class="eh f">開催</div>${fv}`:"");
     const[y,mm]=m.split("-");
     const cand=[...d,...f],ph=x=>IMG[x.r[0]]&&IMG[x.r[0]].v;
     const nu=x=>ph(x)&&!used.has(ph(x));
